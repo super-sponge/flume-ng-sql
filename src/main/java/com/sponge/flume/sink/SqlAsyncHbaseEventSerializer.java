@@ -13,8 +13,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.nio.charset.Charset;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.*;
 
 /**
  * A sql serializer to be used with the AsyncHBaseSink
@@ -36,15 +35,17 @@ import java.util.List;
  * means no column is incremented.
  */
 public class SqlAsyncHbaseEventSerializer implements AsyncHbaseEventSerializer {
-    private byte[] table;
+
     private byte[] cf;
     private byte[] payload;
     private byte[] incrementColumn;
     private byte[] incrementRow;
 
 
-    private byte[][] colMaps;
-    private int cols;
+    private Map<String, byte[][]> mapColMaps = new HashMap<String, byte[][]>();
+    private Map<String, Integer> mapCols = new HashMap<String, Integer>();
+    private Map<String, String>  headers = new HashMap<String, String>();
+    private String namespace ;
 
     private final static String delimiter = "\",\"";
     private final static int ROWKEY_INDEX = 2;
@@ -57,7 +58,6 @@ public class SqlAsyncHbaseEventSerializer implements AsyncHbaseEventSerializer {
 
     @Override
     public void initialize(byte[] table, byte[] cf) {
-        this.table = table;
         this.cf = cf;
     }
 
@@ -69,6 +69,11 @@ public class SqlAsyncHbaseEventSerializer implements AsyncHbaseEventSerializer {
 
             String body = trimFirstAndLastChar(Bytes.toString(payload), '\"');
             String[] values = body.split(delimiter);
+            String tablename = this.headers.get("tablename");
+            byte[] table = getTableName(tablename);
+            int cols = mapCols.get(tablename);
+            byte[][] colMaps = mapColMaps.get(tablename);
+
 
             //seq,priv,type,dat1,dat2
             if ("I".equals(values[OP_TYPE]) || "U".equals(values[OP_TYPE])) {
@@ -95,6 +100,10 @@ public class SqlAsyncHbaseEventSerializer implements AsyncHbaseEventSerializer {
             String body = trimFirstAndLastChar(Bytes.toString(payload), '\"');
             String[] values = body.split(delimiter);
 
+            String tablename = this.headers.get("tablename");
+            byte[] table = getTableName(tablename);
+
+
             //seq,priv,type,dat1,dat2
             if ("D".equals(values[OP_TYPE])) {
                 DeleteRequest deleteRequest = new DeleteRequest(table,
@@ -110,6 +119,8 @@ public class SqlAsyncHbaseEventSerializer implements AsyncHbaseEventSerializer {
     }
 
     public List<AtomicIncrementRequest> getIncrements() {
+        String tablename = this.headers.get("tablename");
+        byte[] table = getTableName(tablename);
         List<AtomicIncrementRequest> actions = new ArrayList<AtomicIncrementRequest>();
         if (incrementColumn != null) {
             AtomicIncrementRequest inc = new AtomicIncrementRequest(table,
@@ -135,20 +146,36 @@ public class SqlAsyncHbaseEventSerializer implements AsyncHbaseEventSerializer {
         incrementRow = context.getString("incrementRow", "incRow").getBytes(Charsets.UTF_8);
 
         //get column maps
-        String colmap = context.getString("colmaps", "col1");
-        String[] strcolMaps = colmap.split(",");
-        logger.info("colMaps is : " + colmap);
-        cols = strcolMaps.length;
-        colMaps = new byte[cols][];
-        for (int i = 0; i < cols; i++) {
-            colMaps[i] = strcolMaps[i].getBytes(Charsets.UTF_8);
+        Map<String, String> tablesProperties = context.getSubProperties("colmaps.");
+        Iterator<Map.Entry<String, String>> it = tablesProperties.entrySet().iterator();
+
+        Map.Entry<String, String> e;
+
+        while (it.hasNext()) {
+            e = it.next();
+            String tabname = e.getKey();
+            String colmap = e.getValue();
+            logger.info("table is {} maps is {}", tabname, colmap);
+
+            String[] strcolMaps = colmap.split(",");
+            int cols = strcolMaps.length;
+            byte[][] byteMap = new byte[cols][];
+            for (int i = 0; i < cols; i++) {
+                byteMap[i] = strcolMaps[i].getBytes(Charsets.UTF_8);
+            }
+            mapColMaps.put(tabname, byteMap);
+            mapCols.put(tabname, cols);
         }
+
+        namespace = context.getString("namespace");
 
     }
 
     @Override
     public void setEvent(Event event) {
         this.payload = event.getBody();
+        this.headers = event.getHeaders();
+
     }
 
     @Override
@@ -157,17 +184,12 @@ public class SqlAsyncHbaseEventSerializer implements AsyncHbaseEventSerializer {
     }
 
     public static String trimFirstAndLastChar(String source,char element){
-//        boolean beginIndexFlag = true;
-//        boolean endIndexFlag = true;
-//        do{
-//            int beginIndex = source.indexOf(element) == 0 ? 1 : 0;
-//            int endIndex = source.lastIndexOf(element) + 1 == source.length() ? source.lastIndexOf(element) : source.length();
-//            source = source.substring(beginIndex, endIndex);
-//            beginIndexFlag = (source.indexOf(element) == 0);
-//            endIndexFlag = (source.lastIndexOf(element) + 1 == source.length());
-//        } while (beginIndexFlag || endIndexFlag);
-
         return source.substring(1, source.length()- 2);
+    }
+
+    private byte[] getTableName(String tablename) {
+        String tableAllname   = this.namespace + ":" + tablename;
+        return  tableAllname.toUpperCase().getBytes(Charsets.UTF_8);
     }
 
 }

@@ -42,8 +42,8 @@ public class SQLSourceHelper {
     private File file,directory;
     private int runQueryDelay, batchSize, maxRows;
     private String startFrom, currentIndex;
-    private String statusFilePath, statusFileName, connectionURL, table,
-            columnsToSelect, customQuery, query, sourceName;
+    private String statusFilePath, statusFileName, connectionURL,
+             customQuery, query, sourceName;
 
     private Context context;
 
@@ -59,8 +59,6 @@ public class SQLSourceHelper {
 
     private static final String SOURCE_NAME_STATUS_FILE = "SourceName";
     private static final String URL_STATUS_FILE = "URL";
-    private static final String COLUMNS_TO_SELECT_STATUS_FILE = "ColumnsToSelect";
-    private static final String TABLE_STATUS_FILE = "Table";
     private static final String LAST_INDEX_STATUS_FILE = "LastIndex";
     private static final String QUERY_STATUS_FILE = "Query";
 
@@ -77,8 +75,6 @@ public class SQLSourceHelper {
 
         statusFilePath = context.getString("status.file.path", DEFAULT_STATUS_DIRECTORY);
         statusFileName = context.getString("status.file.name");
-        table = context.getString("table");
-        columnsToSelect = context.getString("columns.to.select","*");
         runQueryDelay = context.getInteger("run.query.delay",DEFAULT_QUERY_DELAY);
         directory = new File(statusFilePath);
         customQuery = context.getString("custom.query");
@@ -97,7 +93,7 @@ public class SQLSourceHelper {
             createDirectory();
         }
 
-        file = new File(statusFilePath + "/" + statusFileName);
+        file = new File(statusFilePath + "/" + sourceName + '.' + statusFileName);
 
         if (!isStatusFileCreated()){
             currentIndex = startFrom;
@@ -112,16 +108,11 @@ public class SQLSourceHelper {
 
     public String buildQuery() {
 
-        if (customQuery == null){
-            return "SELECT " + columnsToSelect + " FROM " + table;
+        if (customQuery.contains("$@$")){
+            return customQuery.replace("$@$", currentIndex);
         }
-        else {
-            if (customQuery.contains("$@$")){
-                return customQuery.replace("$@$", currentIndex);
-            }
-            else{
-                return customQuery;
-            }
+        else{
+            return customQuery;
         }
     }
 
@@ -173,14 +164,7 @@ public class SQLSourceHelper {
         statusFileJsonMap.put(SOURCE_NAME_STATUS_FILE, sourceName);
         statusFileJsonMap.put(URL_STATUS_FILE, connectionURL);
         statusFileJsonMap.put(LAST_INDEX_STATUS_FILE, currentIndex);
-
-        if (isCustomQuerySet()){
-            statusFileJsonMap.put(QUERY_STATUS_FILE,customQuery);
-        }else{
-            statusFileJsonMap.put(COLUMNS_TO_SELECT_STATUS_FILE, columnsToSelect);
-            statusFileJsonMap.put(TABLE_STATUS_FILE, table);
-        }
-
+        statusFileJsonMap.put(QUERY_STATUS_FILE,customQuery);
 
         try {
             Writer fileWriter = new FileWriter(file,false);
@@ -246,24 +230,6 @@ public class SQLSourceHelper {
             throw new ParseException(ERROR_UNEXPECTED_EXCEPTION);
         }
 
-        // Check default query values
-        if (customQuery == null)
-        {
-            if (!statusFileJsonMap.containsKey(COLUMNS_TO_SELECT_STATUS_FILE) || !statusFileJsonMap.containsKey(TABLE_STATUS_FILE)){
-                LOG.error("Expected ColumsToSelect and Table fields in status file");
-                throw new ParseException(ERROR_UNEXPECTED_EXCEPTION);
-            }
-            if (!statusFileJsonMap.get(COLUMNS_TO_SELECT_STATUS_FILE).equals(columnsToSelect)){
-                LOG.error("ColumsToSelect value in status file doesn't match with configured in properties file");
-                throw new ParseException(ERROR_UNEXPECTED_EXCEPTION);
-            }
-            if (!statusFileJsonMap.get(TABLE_STATUS_FILE).equals(table)){
-                LOG.error("Table value in status file doesn't match with configured in properties file");
-                throw new ParseException(ERROR_UNEXPECTED_EXCEPTION);
-            }
-            return;
-        }
-
         // Check custom query values
         if (customQuery != null){
             if (!statusFileJsonMap.containsKey(QUERY_STATUS_FILE)){
@@ -289,9 +255,6 @@ public class SQLSourceHelper {
         }
         if (statusFileName == null){
             throw new ConfigurationException("status.file.name property not set");
-        }
-        if (table == null && customQuery == null){
-            throw new ConfigurationException("property table not set");
         }
     }
 
@@ -339,9 +302,6 @@ public class SQLSourceHelper {
         return connectionURL;
     }
 
-    boolean isCustomQuerySet() {
-        return (customQuery != null);
-    }
 
     Context getContext() {
         return context;

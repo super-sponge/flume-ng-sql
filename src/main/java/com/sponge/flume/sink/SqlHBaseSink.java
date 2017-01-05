@@ -438,46 +438,48 @@ public class SqlHBaseSink extends AbstractSink implements Configurable {
                             .newSingleThreadExecutor(),
                             Executors.newSingleThreadExecutor()));
         }
-        final CountDownLatch latch = new CountDownLatch(1);
-        final AtomicBoolean fail = new AtomicBoolean(false);
-        client.ensureTableFamilyExists(
-                tableName.getBytes(Charsets.UTF_8), columnFamily).addCallbacks(
-                new Callback<Object, Object>() {
-                    @Override
-                    public Object call(Object arg) throws Exception {
-                        latch.countDown();
-                        logger.info("table found");
-                        return null;
-                    }
-                },
-                new Callback<Object, Object>() {
-                    @Override
-                    public Object call(Object arg) throws Exception {
-                        fail.set(true);
-                        latch.countDown();
-                        return null;
-                    }
-                });
-
-        try {
-            logger.info("waiting on callback");
-            latch.await();
-            logger.info("callback received");
-        } catch (InterruptedException e) {
-            sinkCounter.incrementConnectionFailedCount();
-            throw new FlumeException(
-                    "Interrupted while waiting for Hbase Callbacks", e);
-        }
-        if(fail.get()){
-            sinkCounter.incrementConnectionFailedCount();
-            client.shutdown();
-            client = null;
-            throw new FlumeException(
-                    "Could not start sink. " +
-                            "Table or column family does not exist in Hbase.");
-        } else {
-            open = true;
-        }
+        //检查表是否存在
+//        final CountDownLatch latch = new CountDownLatch(1);
+//        final AtomicBoolean fail = new AtomicBoolean(false);
+//        client.ensureTableFamilyExists(
+//                tableName.getBytes(Charsets.UTF_8), columnFamily).addCallbacks(
+//                new Callback<Object, Object>() {
+//                    @Override
+//                    public Object call(Object arg) throws Exception {
+//                        latch.countDown();
+//                        logger.info("table found");
+//                        return null;
+//                    }
+//                },
+//                new Callback<Object, Object>() {
+//                    @Override
+//                    public Object call(Object arg) throws Exception {
+//                        fail.set(true);
+//                        latch.countDown();
+//                        return null;
+//                    }
+//                });
+//
+//        try {
+//            logger.info("waiting on callback");
+//            latch.await();
+//            logger.info("callback received");
+//        } catch (InterruptedException e) {
+//            sinkCounter.incrementConnectionFailedCount();
+//            throw new FlumeException(
+//                    "Interrupted while waiting for Hbase Callbacks", e);
+//        }
+//        if(fail.get()){
+//            sinkCounter.incrementConnectionFailedCount();
+//            client.shutdown();
+//            client = null;
+//            throw new FlumeException(
+//                    "Could not start sink. " +
+//                            "Table or column family does not exist in Hbase.");
+//        } else {
+//            open = true;
+//        }
+        open = true;
         client.setFlushInterval((short) 0);
         super.start();
     }

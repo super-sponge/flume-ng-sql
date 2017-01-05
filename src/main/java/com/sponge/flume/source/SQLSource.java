@@ -14,23 +14,25 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.io.Writer;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 /**
  * A Source to read data from a SQL database. This source ask for new data in a table each configured time.<p>
  * Created by sponge on 2016/12/26 0026.
+ *
  * @author <a href="mailto:super_sponge@163.com">liuhb</a>
  */
 public class SQLSource extends AbstractSource implements Configurable, PollableSource {
 
     private static final Logger LOG = LoggerFactory.getLogger(SQLSource.class);
-    protected SQLSourceHelper sqlSourceHelper;
-    private SqlSourceCounter sqlSourceCounter;
-    private CSVWriter csvWriter;
+    private static final int DEFAULT_BATCH_SIZE = 100;
+
     private HibernateHelper hibernateHelper;
+    private int batchSize;
+
+    Map<String, SQLSourceHelper> mapSQLSourceHelper = new HashMap<String, SQLSourceHelper>();
+    Map<String, SqlSourceCounter> mapSqlSourceCounter = new HashMap<String, SqlSourceCounter>();
+    Map<String, CSVWriter>  mapCSVWriter = new HashMap<String, CSVWriter>();
 
     /**
      * Configure the source, load configuration properties and establish connection with database
@@ -42,19 +44,31 @@ public class SQLSource extends AbstractSource implements Configurable, PollableS
 
         LOG.info("Reading and processing configuration values for source " + getName());
 
-    	/* Initialize configuration parameters */
-        sqlSourceHelper = new SQLSourceHelper(context, this.getName());
-
-    	/* Initialize metric counters */
-        sqlSourceCounter = new SqlSourceCounter("SOURCESQL." + this.getName());
-
+        batchSize = context.getInteger("batch.size",DEFAULT_BATCH_SIZE);
+        //get source configuration
+        getMultiSql(context);
         /* Establish connection with database */
-        hibernateHelper = new HibernateHelper(sqlSourceHelper);
+        hibernateHelper = new HibernateHelper(context);
         hibernateHelper.establishSession();
 
-        /* Instantiate the CSV Writer */
-        csvWriter = new CSVWriter(new ChannelWriter());
 
+    }
+
+    private void getMultiSql(Context context) {
+        Map<String, String> tablesProperties = context.getSubProperties("tables.");
+        Iterator<Map.Entry<String, String>> it = tablesProperties.entrySet().iterator();
+
+        Map.Entry<String, String> e;
+
+        while (it.hasNext()) {
+            e = it.next();
+            LOG.info("tableName is {} sql is {}", e.getKey(), e.getValue());
+            Context tabContext = context;
+            tabContext.put("custom.query", e.getValue());
+            mapSQLSourceHelper.put(e.getKey(), new SQLSourceHelper(tabContext, e.getKey()));
+            mapSqlSourceCounter.put(e.getKey(), new SqlSourceCounter(e.getKey()));
+            mapCSVWriter.put(e.getKey(), new CSVWriter(new ChannelWriter(e.getKey())));
+        }
     }
 
     /**
@@ -64,24 +78,35 @@ public class SQLSource extends AbstractSource implements Configurable, PollableS
     public Status process() throws EventDeliveryException {
 
         try {
-            sqlSourceCounter.startProcess();
-
-            List<List<Object>> result = hibernateHelper.executeQuery();
-
-            if (!result.isEmpty())
-            {
-                csvWriter.writeAll(sqlSourceHelper.getAllRows(result),true);
-                csvWriter.flush();
-                sqlSourceCounter.incrementEventCount(result.size());
+            for (Map.Entry<String, SQLSourceHelper> entry : mapSQLSourceHelper.entrySet()) {
+                String tableName = entry.getKey();
+                SQLSourceHelper sqlSourceHelper = entry.getValue();
+                hibernateHelper.setSqlSourceHelper(sqlSourceHelper);
+                hibernateHelper.setDefaultReadOnly(sqlSourceHelper.isReadOnlySession());
 
 
-                sqlSourceHelper.updateStatusFile();
-            }
+                SqlSourceCounter sqlSourceCounter = mapSqlSourceCounter.get(tableName);
+                CSVWriter csvWriter = mapCSVWriter.get(tableName);
 
-            sqlSourceCounter.endProcess(result.size());
 
-            if (result.size() < sqlSourceHelper.getMaxRows()){
-                Thread.sleep(sqlSourceHelper.getRunQueryDelay());
+                sqlSourceCounter.startProcess();
+
+                List<List<Object>> result = hibernateHelper.executeQuery();
+
+                if (!result.isEmpty()) {
+                    csvWriter.writeAll(sqlSourceHelper.getAllRows(result), true);
+                    csvWriter.flush();
+                    sqlSourceCounter.incrementEventCount(result.size());
+
+
+                    sqlSourceHelper.updateStatusFile();
+                }
+
+                sqlSourceCounter.endProcess(result.size());
+
+                if (result.size() < sqlSourceHelper.getMaxRows()) {
+                    Thread.sleep(sqlSourceHelper.getRunQueryDelay());
+                }
             }
 
             return Status.READY;
@@ -97,9 +122,10 @@ public class SQLSource extends AbstractSource implements Configurable, PollableS
      */
     @Override
     public void start() {
-
-        LOG.info("Starting sql source {} ...", getName());
-        sqlSourceCounter.start();
+        for(SqlSourceCounter sqlSourceCounter : mapSqlSourceCounter.values()) {
+            LOG.info("Starting sql source {} ...", sqlSourceCounter.getName());
+            sqlSourceCounter.start();
+        }
         super.start();
     }
 
@@ -108,39 +134,47 @@ public class SQLSource extends AbstractSource implements Configurable, PollableS
      */
     @Override
     public void stop() {
-
-        LOG.info("Stopping sql source {} ...", getName());
-
-        try
-        {
+        try {
             hibernateHelper.closeSession();
-            csvWriter.close();
+            for(CSVWriter csvWriter : mapCSVWriter.values()) {
+                csvWriter.close();
+            }
         } catch (IOException e) {
             LOG.warn("Error CSVWriter object ", e);
         } finally {
-            this.sqlSourceCounter.stop();
+            for(SqlSourceCounter sqlSourceCounter : mapSqlSourceCounter.values()) {
+                LOG.info("Stopping sql source {} ...", sqlSourceCounter.getName());
+                sqlSourceCounter.stop();
+            }
             super.stop();
         }
     }
 
     private class ChannelWriter extends Writer {
         private List<Event> events = new ArrayList<>();
+        private String tableName;
+
+        public ChannelWriter(String tableName) {
+            this.tableName = tableName;
+        }
 
         @Override
         public void write(char[] cbuf, int off, int len) throws IOException {
             Event event = new SimpleEvent();
 
             String s = new String(cbuf);
-            event.setBody(s.substring(off, len-1).getBytes());
+            event.setBody(s.substring(off, len - 1).getBytes());
 
             Map<String, String> headers;
             headers = new HashMap<String, String>();
             headers.put("timestamp", String.valueOf(System.currentTimeMillis()));
+            headers.put("tablename", this.tableName);
+
             event.setHeaders(headers);
 
             events.add(event);
 
-            if (events.size() >= sqlSourceHelper.getBatchSize())
+            if (events.size() >= batchSize)
                 flush();
         }
 

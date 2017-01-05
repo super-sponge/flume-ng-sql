@@ -28,11 +28,10 @@ public class SQLSourceHelperTest {
     public void setup() {
 
         when(context.getString("status.file.name")).thenReturn("statusFileName.txt");
+        when(context.getString("custom.query")).thenReturn("SELECT * FROM table");
         when(context.getString("hibernate.connection.url")).thenReturn("jdbc:mysql://host:3306/database");
-        when(context.getString("table")).thenReturn("table");
         when(context.getString("incremental.column.name")).thenReturn("incrementalColumName");
         when(context.getString("status.file.path", "/var/lib/flume")).thenReturn("/tmp/flume");
-        when(context.getString("columns.to.select", "*")).thenReturn("*");
         when(context.getInteger("run.query.delay", 10000)).thenReturn(10000);
         when(context.getInteger("batch.size", 100)).thenReturn(100);
         when(context.getInteger("max.rows", 10000)).thenReturn(10000);
@@ -113,11 +112,6 @@ public class SQLSourceHelperTest {
         new SQLSourceHelper(context,"Source Name");
     }
 
-    @Test(expected = ConfigurationException.class)
-    public void tableNotSet() {
-        when(context.getString("table")).thenReturn(null);
-        new SQLSourceHelper(context,"Source Name");
-    }
 
     @Test
     public void chekGetAllRowsWithEmptyParam() {
@@ -179,21 +173,21 @@ public class SQLSourceHelperTest {
         }
     }
 
-    @Test
-    public void checkStatusFileCorrectlyCreated() {
-
-        SQLSourceHelper sqlSourceHelper = new SQLSourceHelper(context,"Source Name");
-        //sqlSourceHelper.setCurrentIndex(10);
-
-        sqlSourceHelper.updateStatusFile();
-
-        File file = new File("/tmp/flume/statusFileName.txt");
-        assertEquals(true, file.exists());
-        if (file.exists()){
-            file.delete();
-            file.getParentFile().delete();
-        }
-    }
+//    @Test
+//    public void checkStatusFileCorrectlyCreated() {
+//
+//        SQLSourceHelper sqlSourceHelper = new SQLSourceHelper(context,"Source Name");
+//        //sqlSourceHelper.setCurrentIndex(10);
+//
+//        sqlSourceHelper.updateStatusFile();
+//
+//        File file = new File("/tmp/flume/statusFileName.txt");
+//        assertEquals(true, file.exists());
+//        if (file.exists()){
+//            file.delete();
+//            file.getParentFile().delete();
+//        }
+//    }
 
     @Test
     public void checkStatusFileCorrectlyUpdated() throws Exception {

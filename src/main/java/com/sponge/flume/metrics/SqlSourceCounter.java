@@ -19,10 +19,13 @@ public class SqlSourceCounter extends MonitoredCounterGroup implements SqlSource
     private static final String MAX_THROUGHPUT = "max_throughput";
     private static final String EVENT_COUNT = "events_count";
 
+    private String counterName;
+
     private static final String[] ATTRIBUTES = {AVERAGE_THROUGHPUT, CURRENT_THROUGHPUT, MAX_THROUGHPUT, EVENT_COUNT};
 
     public SqlSourceCounter(String name) {
         super(MonitoredCounterGroup.Type.SOURCE, name, ATTRIBUTES);
+        this.counterName = name;
     }
 
     @Override
@@ -70,6 +73,9 @@ public class SqlSourceCounter extends MonitoredCounterGroup implements SqlSource
             set(AVERAGE_THROUGHPUT, (getEventCount()/runningTime));
 
         set(CURRENT_THROUGHPUT,throughput);
+    }
+    public String getName() {
+        return this.counterName;
     }
 }
 

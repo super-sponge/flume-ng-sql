@@ -41,6 +41,7 @@ public class HibernateHelper {
     public HibernateHelper(SQLSourceHelper sqlSourceHelper) {
 
         this.sqlSourceHelper = sqlSourceHelper;
+
         Context context = sqlSourceHelper.getContext();
 
         Map<String,String> hibernateProperties = context.getSubProperties("hibernate.");
@@ -55,6 +56,25 @@ public class HibernateHelper {
         }
     }
 
+    public HibernateHelper(Context context) {
+
+        Map<String,String> hibernateProperties = context.getSubProperties("hibernate.");
+        Iterator<Map.Entry<String,String>> it = hibernateProperties.entrySet().iterator();
+
+        config = new Configuration();
+        Map.Entry<String, String> e;
+
+        while (it.hasNext()){
+            e = it.next();
+            config.setProperty("hibernate." + e.getKey(), e.getValue());
+        }
+
+    }
+
+    public void setSqlSourceHelper(SQLSourceHelper sqlSourceHelper) {
+        this.sqlSourceHelper = sqlSourceHelper;
+    }
+
     /**
      * Connect to database using hibernate
      */
@@ -67,8 +87,10 @@ public class HibernateHelper {
         factory = config.buildSessionFactory(serviceRegistry);
         session = factory.openSession();
         session.setCacheMode(CacheMode.IGNORE);
+    }
 
-        session.setDefaultReadOnly(sqlSourceHelper.isReadOnlySession());
+    public void setDefaultReadOnly(boolean readOnly) {
+        session.setDefaultReadOnly(readOnly);
     }
 
     /**
@@ -99,23 +121,10 @@ public class HibernateHelper {
             resetConnection();
         }
 
-        if (sqlSourceHelper.isCustomQuerySet()){
+        query = session.createSQLQuery(sqlSourceHelper.buildQuery());
 
-            query = session.createSQLQuery(sqlSourceHelper.buildQuery());
-
-            if (sqlSourceHelper.getMaxRows() != 0){
-                query = query.setMaxResults(sqlSourceHelper.getMaxRows());
-            }
-        }
-        else
-        {
-            query = session
-                    .createSQLQuery(sqlSourceHelper.getQuery())
-                    .setFirstResult(Integer.parseInt(sqlSourceHelper.getCurrentIndex()));
-
-            if (sqlSourceHelper.getMaxRows() != 0){
-                query = query.setMaxResults(sqlSourceHelper.getMaxRows());
-            }
+        if (sqlSourceHelper.getMaxRows() != 0){
+            query = query.setMaxResults(sqlSourceHelper.getMaxRows());
         }
 
         try {
@@ -125,14 +134,7 @@ public class HibernateHelper {
         }
 
         if (!rowsList.isEmpty()){
-            if (sqlSourceHelper.isCustomQuerySet()){
-                sqlSourceHelper.setCurrentIndex(rowsList.get(rowsList.size()-1).get(0).toString());
-            }
-            else
-            {
-                sqlSourceHelper.setCurrentIndex(Integer.toString((Integer.parseInt(sqlSourceHelper.getCurrentIndex())
-                        + rowsList.size())));
-            }
+            sqlSourceHelper.setCurrentIndex(rowsList.get(rowsList.size()-1).get(0).toString());
         }
 
         return rowsList;
