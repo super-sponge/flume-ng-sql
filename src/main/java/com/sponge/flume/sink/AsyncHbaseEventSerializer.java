@@ -22,7 +22,7 @@ public interface AsyncHbaseEventSerializer extends Configurable,
      * {@link org.hbase.async.AtomicIncrementRequest}.
      * @param cf - The column family to be used.
      */
-    public void initialize(byte[] table, byte[] cf);
+    public void initialize(String namespace, byte[] cf);
 
     /**
      * @param Event to be written to HBase.
@@ -55,5 +55,7 @@ public interface AsyncHbaseEventSerializer extends Configurable,
      * Clean up any state. This will be called when the sink is being stopped.
      */
     public void cleanUp();
+
+    public List<byte[]>  getTables();
 }
 

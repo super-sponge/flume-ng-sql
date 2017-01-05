@@ -57,7 +57,8 @@ public class SqlAsyncHbaseEventSerializer implements AsyncHbaseEventSerializer {
             LoggerFactory.getLogger(SqlAsyncHbaseEventSerializer.class);
 
     @Override
-    public void initialize(byte[] table, byte[] cf) {
+    public void initialize(String namespace,byte[] cf) {
+        this.namespace = namespace;
         this.cf = cf;
     }
 
@@ -147,12 +148,8 @@ public class SqlAsyncHbaseEventSerializer implements AsyncHbaseEventSerializer {
 
         //get column maps
         Map<String, String> tablesProperties = context.getSubProperties("colmaps.");
-        Iterator<Map.Entry<String, String>> it = tablesProperties.entrySet().iterator();
 
-        Map.Entry<String, String> e;
-
-        while (it.hasNext()) {
-            e = it.next();
+        for(Map.Entry<String, String> e : tablesProperties.entrySet()) {
             String tabname = e.getKey();
             String colmap = e.getValue();
             logger.info("table is {} maps is {}", tabname, colmap);
@@ -167,7 +164,6 @@ public class SqlAsyncHbaseEventSerializer implements AsyncHbaseEventSerializer {
             mapCols.put(tabname, cols);
         }
 
-        namespace = context.getString("namespace");
 
     }
 
@@ -190,6 +186,14 @@ public class SqlAsyncHbaseEventSerializer implements AsyncHbaseEventSerializer {
     private byte[] getTableName(String tablename) {
         String tableAllname   = this.namespace + ":" + tablename;
         return  tableAllname.toUpperCase().getBytes(Charsets.UTF_8);
+    }
+
+    public List<byte[]>  getTables() {
+        List<byte[]> lstTable = new ArrayList<byte[]>();
+        for(String tabname : mapCols.keySet()) {
+            lstTable.add(getTableName(tabname));
+        }
+        return lstTable;
     }
 
 }

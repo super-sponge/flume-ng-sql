@@ -56,12 +56,7 @@ public class SQLSource extends AbstractSource implements Configurable, PollableS
 
     private void getMultiSql(Context context) {
         Map<String, String> tablesProperties = context.getSubProperties("tables.");
-        Iterator<Map.Entry<String, String>> it = tablesProperties.entrySet().iterator();
-
-        Map.Entry<String, String> e;
-
-        while (it.hasNext()) {
-            e = it.next();
+        for(Map.Entry<String, String> e : tablesProperties.entrySet()) {
             LOG.info("tableName is {} sql is {}", e.getKey(), e.getValue());
             Context tabContext = context;
             tabContext.put("custom.query", e.getValue());

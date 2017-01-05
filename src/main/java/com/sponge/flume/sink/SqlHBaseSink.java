@@ -58,16 +58,17 @@ import com.google.common.base.Charsets;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Throwables;
 import com.stumbleupon.async.Callback;
+
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
+
 import org.apache.flume.ChannelException;
 import org.apache.flume.instrumentation.SinkCounter;
 
 /**
- *
  * A simple sink which reads events from a channel and writes them to HBase.
  * This Sink uses an aysnchronous API internally and is likely to
  * perform better.
@@ -76,13 +77,13 @@ import org.apache.flume.instrumentation.SinkCounter;
  * events from the channel, and writing them to Hbase, to minimize the number
  * of flushes on the hbase tables. To use this sink, it has to be configured
  * with certain mandatory parameters:<p>
- *
+ * <p>
  * <tt>table: </tt> The name of the table in Hbase to write to. <p>
  * <tt>columnFamily: </tt> The column family in Hbase to write to.<p>
  * Other optional parameters are:<p>
  * <tt>serializer:</tt> A class implementing
- *  {@link AsyncHbaseEventSerializer}.
- *  An instance of
+ * {@link AsyncHbaseEventSerializer}.
+ * An instance of
  * this class will be used to serialize events which are written to hbase.<p>
  * <tt>serializer.*:</tt> Passed in the <code>configure()</code> method to
  * serializer
@@ -94,7 +95,7 @@ import org.apache.flume.instrumentation.SinkCounter;
  * <tt>timeout: </tt> The length of time in milliseconds the sink waits for
  * callbacks from hbase for all events in a transaction.
  * If no timeout is specified, the sink will wait forever.<p>
- *
+ * <p>
  * <strong>Note: </strong> Hbase does not guarantee atomic commits on multiple
  * rows. So if a subset of events in a batch are written to disk by Hbase and
  * Hbase fails, the flume transaction is rolled back, causing flume to write
@@ -106,7 +107,7 @@ import org.apache.flume.instrumentation.SinkCounter;
  */
 public class SqlHBaseSink extends AbstractSink implements Configurable {
 
-    private String tableName;
+    private String namespace;
     private byte[] columnFamily;
     private long batchSize;
     private static final Logger logger =
@@ -135,7 +136,7 @@ public class SqlHBaseSink extends AbstractSink implements Configurable {
     private final Comparator<byte[]> COMPARATOR = UnsignedBytes
             .lexicographicalComparator();
 
-    public SqlHBaseSink(){
+    public SqlHBaseSink() {
         this(null);
     }
 
@@ -145,7 +146,7 @@ public class SqlHBaseSink extends AbstractSink implements Configurable {
 
     @VisibleForTesting
     SqlHBaseSink(Configuration conf, boolean isTimeoutTest,
-                   boolean isCoalesceTest) {
+                 boolean isCoalesceTest) {
         this.conf = conf;
         this.isTimeoutTest = isTimeoutTest;
         this.isCoalesceTest = isCoalesceTest;
@@ -327,7 +328,7 @@ public class SqlHBaseSink extends AbstractSink implements Configurable {
 
     @Override
     public void configure(Context context) {
-        tableName = context.getString(HBaseSinkConfigurationConstants.CONFIG_TABLE);
+        namespace = context.getString("namespace");
         String cf = context.getString(
                 HBaseSinkConfigurationConstants.CONFIG_COLUMN_FAMILY);
         batchSize = context.getLong(
@@ -336,12 +337,12 @@ public class SqlHBaseSink extends AbstractSink implements Configurable {
         //If not specified, will use HBase defaults.
         eventSerializerType = context.getString(
                 HBaseSinkConfigurationConstants.CONFIG_SERIALIZER);
-        Preconditions.checkNotNull(tableName,
-                "Table name cannot be empty, please specify in configuration file");
+        Preconditions.checkNotNull(namespace,
+                "Namespace name cannot be empty, please specify in configuration file");
         Preconditions.checkNotNull(cf,
                 "Column family cannot be empty, please specify in configuration file");
         //Check foe event serializer, if null set event serializer type
-        if(eventSerializerType == null || eventSerializerType.isEmpty()) {
+        if (eventSerializerType == null || eventSerializerType.isEmpty()) {
             eventSerializerType =
                     "org.apache.flume.sink.hbase.SimpleAsyncHbaseEventSerializer";
             logger.info("No serializer defined, Will use default");
@@ -356,18 +357,18 @@ public class SqlHBaseSink extends AbstractSink implements Configurable {
                             Class.forName(eventSerializerType);
             serializer = clazz.newInstance();
             serializer.configure(serializerContext);
-            serializer.initialize(tableName.getBytes(Charsets.UTF_8), columnFamily);
+            serializer.initialize(this.namespace, columnFamily);
         } catch (Exception e) {
-            logger.error("Could not instantiate event serializer." , e);
+            logger.error("Could not instantiate event serializer.", e);
             Throwables.propagate(e);
         }
 
-        if(sinkCounter == null) {
+        if (sinkCounter == null) {
             sinkCounter = new SinkCounter(this.getName());
         }
         timeout = context.getLong(HBaseSinkConfigurationConstants.CONFIG_TIMEOUT,
                 HBaseSinkConfigurationConstants.DEFAULT_TIMEOUT);
-        if(timeout <= 0){
+        if (timeout <= 0) {
             logger.warn("Timeout should be positive for Hbase sink. "
                     + "Sink will not timeout.");
             timeout = HBaseSinkConfigurationConstants.DEFAULT_TIMEOUT;
@@ -377,7 +378,7 @@ public class SqlHBaseSink extends AbstractSink implements Configurable {
 
         zkQuorum = context.getString(
                 HBaseSinkConfigurationConstants.ZK_QUORUM, "").trim();
-        if(!zkQuorum.isEmpty()) {
+        if (!zkQuorum.isEmpty()) {
             zkBaseDir = context.getString(
                     HBaseSinkConfigurationConstants.ZK_ZNODE_PARENT,
                     HBaseSinkConfigurationConstants.DEFAULT_ZK_ZNODE_PARENT);
@@ -395,7 +396,7 @@ public class SqlHBaseSink extends AbstractSink implements Configurable {
         enableWal = context.getBoolean(HBaseSinkConfigurationConstants
                 .CONFIG_ENABLE_WAL, HBaseSinkConfigurationConstants.DEFAULT_ENABLE_WAL);
         logger.info("The write to WAL option is set to: " + String.valueOf(enableWal));
-        if(!enableWal) {
+        if (!enableWal) {
             logger.warn("AsyncHBaseSink's enableWal configuration is set to false. " +
                     "All writes to HBase will have WAL disabled, and any data in the " +
                     "memstore of this region in the Region Server could be lost!");
@@ -405,7 +406,7 @@ public class SqlHBaseSink extends AbstractSink implements Configurable {
                 HBaseSinkConfigurationConstants.CONFIG_COALESCE_INCREMENTS,
                 HBaseSinkConfigurationConstants.DEFAULT_COALESCE_INCREMENTS);
 
-        if(batchIncrements) {
+        if (batchIncrements) {
             incrementBuffer = Maps.newHashMap();
             logger.info("Increment coalescing is enabled. Increments will be " +
                     "buffered.");
@@ -421,8 +422,9 @@ public class SqlHBaseSink extends AbstractSink implements Configurable {
     boolean isConfNull() {
         return conf == null;
     }
+
     @Override
-    public void start(){
+    public void start() {
         Preconditions.checkArgument(client == null, "Please call stop "
                 + "before calling start on an old instance.");
         sinkCounter.start();
@@ -430,7 +432,7 @@ public class SqlHBaseSink extends AbstractSink implements Configurable {
         sinkCallbackPool = Executors.newCachedThreadPool(new ThreadFactoryBuilder()
                 .setNameFormat(this.getName() + " HBase Call Pool").build());
         logger.info("Callback pool created");
-        if(!isTimeoutTest) {
+        if (!isTimeoutTest) {
             client = new HBaseClient(zkQuorum, zkBaseDir, sinkCallbackPool);
         } else {
             client = new HBaseClient(zkQuorum, zkBaseDir,
@@ -439,53 +441,55 @@ public class SqlHBaseSink extends AbstractSink implements Configurable {
                             Executors.newSingleThreadExecutor()));
         }
         //检查表是否存在
-//        final CountDownLatch latch = new CountDownLatch(1);
-//        final AtomicBoolean fail = new AtomicBoolean(false);
-//        client.ensureTableFamilyExists(
-//                tableName.getBytes(Charsets.UTF_8), columnFamily).addCallbacks(
-//                new Callback<Object, Object>() {
-//                    @Override
-//                    public Object call(Object arg) throws Exception {
-//                        latch.countDown();
-//                        logger.info("table found");
-//                        return null;
-//                    }
-//                },
-//                new Callback<Object, Object>() {
-//                    @Override
-//                    public Object call(Object arg) throws Exception {
-//                        fail.set(true);
-//                        latch.countDown();
-//                        return null;
-//                    }
-//                });
-//
-//        try {
-//            logger.info("waiting on callback");
-//            latch.await();
-//            logger.info("callback received");
-//        } catch (InterruptedException e) {
-//            sinkCounter.incrementConnectionFailedCount();
-//            throw new FlumeException(
-//                    "Interrupted while waiting for Hbase Callbacks", e);
-//        }
-//        if(fail.get()){
-//            sinkCounter.incrementConnectionFailedCount();
-//            client.shutdown();
-//            client = null;
-//            throw new FlumeException(
-//                    "Could not start sink. " +
-//                            "Table or column family does not exist in Hbase.");
-//        } else {
-//            open = true;
-//        }
-        open = true;
+        for (byte[] tableName : serializer.getTables()) {
+            final CountDownLatch latch = new CountDownLatch(1);
+            final AtomicBoolean fail = new AtomicBoolean(false);
+            client.ensureTableFamilyExists(
+                    tableName, columnFamily).addCallbacks(
+                    new Callback<Object, Object>() {
+                        @Override
+                        public Object call(Object arg) throws Exception {
+                            latch.countDown();
+                            logger.info("table found");
+                            return null;
+                        }
+                    },
+                    new Callback<Object, Object>() {
+                        @Override
+                        public Object call(Object arg) throws Exception {
+                            fail.set(true);
+                            latch.countDown();
+                            return null;
+                        }
+                    });
+
+            try {
+                logger.info("waiting on callback");
+                latch.await();
+                logger.info("callback received");
+            } catch (InterruptedException e) {
+                sinkCounter.incrementConnectionFailedCount();
+                throw new FlumeException(
+                        "Interrupted while waiting for Hbase Callbacks", e);
+            }
+            if (fail.get()) {
+                sinkCounter.incrementConnectionFailedCount();
+                client.shutdown();
+                client = null;
+                open = false;
+                throw new FlumeException(
+                        "Could not start sink. " +
+                                "Table or column family does not exist in Hbase.");
+            } else {
+                open = true;
+            }
+        }
         client.setFlushInterval((short) 0);
         super.start();
     }
 
     @Override
-    public void stop(){
+    public void stop() {
         serializer.cleanUp();
         if (client != null) {
             client.shutdown();
@@ -521,7 +525,7 @@ public class SqlHBaseSink extends AbstractSink implements Configurable {
         } catch (Throwable e) {
             logger.error("Failed to commit transaction." +
                     "Transaction rolled back.", e);
-            if(e instanceof Error || e instanceof RuntimeException){
+            if (e instanceof Error || e instanceof RuntimeException) {
                 logger.error("Failed to commit transaction." +
                         "Transaction rolled back.", e);
                 Throwables.propagate(e);
@@ -535,7 +539,8 @@ public class SqlHBaseSink extends AbstractSink implements Configurable {
             txn.close();
         }
     }
-    private class SuccessCallback<R,T> implements Callback<R,T> {
+
+    private class SuccessCallback<R, T> implements Callback<R, T> {
         private Lock lock;
         private AtomicInteger callbacksReceived;
         private Condition condition;
@@ -566,7 +571,7 @@ public class SqlHBaseSink extends AbstractSink implements Configurable {
         private void doCall() throws Exception {
             callbacksReceived.incrementAndGet();
             lock.lock();
-            try{
+            try {
                 condition.signal();
             } finally {
                 lock.unlock();
@@ -574,14 +579,15 @@ public class SqlHBaseSink extends AbstractSink implements Configurable {
         }
     }
 
-    private class FailureCallback<R,T> implements Callback<R,T> {
+    private class FailureCallback<R, T> implements Callback<R, T> {
         private Lock lock;
         private AtomicInteger callbacksReceived;
         private AtomicBoolean txnFail;
         private Condition condition;
         private final boolean isTimeoutTesting;
+
         public FailureCallback(Lock lck, AtomicInteger callbacksReceived,
-                               AtomicBoolean txnFail, Condition condition){
+                               AtomicBoolean txnFail, Condition condition) {
             this.lock = lck;
             this.callbacksReceived = callbacksReceived;
             this.txnFail = txnFail;
@@ -629,6 +635,7 @@ public class SqlHBaseSink extends AbstractSink implements Configurable {
         private final byte[] row;
         private final byte[] column;
         private final int hashCode;
+
         // Since the sink operates only on one table and one cf,
         // we use the data from the owning sink
         public CellIdentifier(byte[] row, byte[] column) {
