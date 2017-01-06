@@ -95,12 +95,16 @@ public class SQLSourceHelper {
 
         file = new File(statusFilePath + "/" + sourceName + '.' + statusFileName);
 
+
         if (!isStatusFileCreated()){
             currentIndex = startFrom;
             createStatusFile();
+            LOG.info("Creae status file {} and currentIndex is {}", file, currentIndex);
         }
-        else
+        else {
             currentIndex = getStatusFileIndex(startFrom);
+            LOG.info("Get index value from {} and currentIndex is {}", file, currentIndex);
+        }
 
         query = buildQuery();
     }
@@ -183,6 +187,7 @@ public class SQLSourceHelper {
         statusFileJsonMap.put(LAST_INDEX_STATUS_FILE, currentIndex);
 
         try {
+            LOG.info("Update status file {} with index row {}", file, currentIndex);
             Writer fileWriter = new FileWriter(file,false);
             JSONValue.writeJSONString(statusFileJsonMap, fileWriter);
             fileWriter.close();

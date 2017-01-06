@@ -180,7 +180,7 @@ public class SqlAsyncHbaseEventSerializer implements AsyncHbaseEventSerializer {
     }
 
     public static String trimFirstAndLastChar(String source,char element){
-        return source.substring(1, source.length()- 2);
+        return source.substring(1, source.length()- 1);
     }
 
     private byte[] getTableName(String tablename) {

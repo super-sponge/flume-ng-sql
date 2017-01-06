@@ -9,6 +9,7 @@ import org.apache.flume.conf.Configurable;
 import org.apache.flume.event.SimpleEvent;
 import org.apache.flume.source.AbstractSource;
 import com.sponge.flume.metrics.SqlSourceCounter;
+import org.mortbay.log.Log;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -55,6 +56,7 @@ public class SQLSource extends AbstractSource implements Configurable, PollableS
     }
 
     private void getMultiSql(Context context) {
+
         Map<String, String> tablesProperties = context.getSubProperties("tables.");
         for(Map.Entry<String, String> e : tablesProperties.entrySet()) {
             LOG.info("tableName is {} sql is {}", e.getKey(), e.getValue());
