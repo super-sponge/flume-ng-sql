@@ -27,9 +27,11 @@ public class SQLSource extends AbstractSource implements Configurable, PollableS
 
     private static final Logger LOG = LoggerFactory.getLogger(SQLSource.class);
     private static final int DEFAULT_BATCH_SIZE = 100;
+    private static final boolean    DEFAULT_TOPIC = false;
 
     private HibernateHelper hibernateHelper;
     private int batchSize;
+    private boolean writeTopic;
 
     Map<String, SQLSourceHelper> mapSQLSourceHelper = new HashMap<String, SQLSourceHelper>();
     Map<String, SqlSourceCounter> mapSqlSourceCounter = new HashMap<String, SqlSourceCounter>();
@@ -46,6 +48,7 @@ public class SQLSource extends AbstractSource implements Configurable, PollableS
         LOG.info("Reading and processing configuration values for source " + getName());
 
         batchSize = context.getInteger("batch.size",DEFAULT_BATCH_SIZE);
+        writeTopic = context.getBoolean("topic", DEFAULT_TOPIC);
         //get source configuration
         getMultiSql(context);
         /* Establish connection with database */
@@ -59,7 +62,7 @@ public class SQLSource extends AbstractSource implements Configurable, PollableS
 
         Map<String, String> tablesProperties = context.getSubProperties("tables.");
         for(Map.Entry<String, String> e : tablesProperties.entrySet()) {
-            LOG.info("tableName is {} sql is {}", e.getKey(), e.getValue());
+            LOG.info("l is {} sql is {}", e.getKey(), e.getValue());
             Context tabContext = context;
             tabContext.put("custom.query", e.getValue());
             mapSQLSourceHelper.put(e.getKey(), new SQLSourceHelper(tabContext, e.getKey()));
@@ -166,6 +169,9 @@ public class SQLSource extends AbstractSource implements Configurable, PollableS
             headers = new HashMap<String, String>();
             headers.put("timestamp", String.valueOf(System.currentTimeMillis()));
             headers.put("tablename", this.tableName);
+            if (writeTopic) {
+                headers.put("topic", this.tableName);
+            }
 
             event.setHeaders(headers);
 
